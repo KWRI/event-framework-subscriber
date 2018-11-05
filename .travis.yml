@@ -1,19 +1,26 @@
 language: go
-go:
-- '1.11'
-branches:
-  only:
-  - "/^v\\d+\\.\\d+(\\.\\d+)?(-\\S*)?$/"
+sudo: false
+notifications:
+  email: false
 before_install:
 - go get github.com/mitchellh/gox && go install github.com/mitchellh/gox
-before_script:
-- go get ./...
 script:
 - sh build.sh
 deploy:
   provider: releases
+  skip_cleanup: true
   api_key:
-    secure: v/q/pI13JmChJLqvZHLJ6pGLBaeL/EDS42jfGJ2W1IP5QuXKczEMEIBNniR+Pj2/4aOrx/etugDIs/2agtsqfBSWHv5jgPCufpgnyNmrmx8wWDPwiXx4ZiY4YsLiXNUeRadSCwe2q4GjE9OkAM+W6kvF/y6obOUONEhCq+M/dIfH3ha76ZZdYaBAyFyATTn2BlZ68OzeIAGFQJbdHUh5ruOlI9/WQXF03j6lu6EojsbuPva4jDc3+Gclp7tiYOoQ1eght3RglYbD9amZzOu3kzufTkKFH/9ojodW0cTwh3X29TH5+J5MN51AaOQmpxHpAppKcOp99HoR6vOy2d6MVJC4JVVSIqXM8OUDR6cKxPiNTz3lXNsAeBrLllh7uaPRLMwUNG/8EkqWbVEEyb9vlk+dnsB2/xBNrBMsrLWvZx5xbisCPUJX2My5Dnz/hDo7Qjqt6fE68ewsN4U6zjA1C0kgAVsQqKAQRTBhHvE4nBxRGH+bzVjBIHVcwLe20VYPkyQ1H4RTlNlXQ71HJg0g22Nn9xZJARG/WrwN32/Wo/40+FG7XUR4vv+JJvdbXS9C5OAo3gPOmvHZRzv/1ZMM0bU/8W0unHTUbPASiKzZvjrySTVzbH9zLlcEo6+UXYlF/4de7n3j41AWixWOdUV+msa1q76zRA1SpCplqyqlSOw=
-  file: releases/*
+    secure: kQo3FLTjczS5StZlbL3aI+LnD5BBOp8ZZUglSUe8Xc3OMqi3GJwssR9cyfb/NscSzTMO+7sKq0EG4r3sNCVulLHsZw7uJcitJPCJE07z0rQdkWptmERZB0yBH18ZzofV1RXniwyjcFG/oUmBz039zjGlI9/TK91VIcHkvaIu4IxUelBRgyv4vUsHUIi10M15WtgXoJax7kwESfKMsFbDj79GrfYx+4vUSQl3fLU0SFmEKBabI9GRXFzCqe1lGgTzXZtN/Jpi87ngLym12RoJbxACHaIRLuZ6sjkLHCrDaE4jrkIfmbN74Zm+hCb5n0MeXai+mtNreWRn2UiZWjOsFWNRb9kr3uHo0B6BwVyVWB/ZkA5f5oFyxFd6O8DDb38ywqgBb9y/1hRa0KOUMokaLDyAN3G02UHr10np1VxrZ4vktiO80fpmCih5sDcoa6sWN4LxcYqD851e29PQWObcYithTzH0R6PpHyat8Mmr6TgwLN+zkYKwHijEMudINuikQpFxRIRyfdXiNzS9wXWzpTzQyr97xERf9S96N1RgHU7oNnkY4Z7zRil6i5UtjAaL+DpmLR9liRaSgOgSOe/Yg7ekEbqBGEeXD7BH19u+3egi2A81tfZQzlLMzOW70GKEkOFjNKgrt4B/ASEuefBT5K4nxAe3AWdQ+5edi/u0/oU=
+  file:
+    - releases/event-framework-subscriber_darwin_amd64
+    - releases/event-framework-subscriber_linux_386
+    - releases/event-framework-subscriber_linux_amd64
+    - releases/event-framework-subscriber_linux_arm
+    - releases/event-framework-subscriber_linux_arm64
+    - releases/event-framework-subscriber_windows_386.exe
+    - releases/event-framework-subscriber_windows_amd64.exe
   on:
+    repo: KWRI/event-framework-subscriber
     tags: true
+    all_branches: true
+
