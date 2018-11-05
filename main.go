@@ -36,6 +36,7 @@ func subscribe(subscription string, ch chan []byte) {
 
 	err := sub.Receive(cctx, func(ctx context.Context, msg *ps.Message) {
 		ch <- msg.Data
+		msg.Ack()
 	})
 	if err != nil {
 		cancel()
@@ -60,4 +61,5 @@ func main() {
 		a := <-ch
 		fmt.Println(string(a))
 	}
+
 }
