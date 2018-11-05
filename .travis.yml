@@ -1,0 +1,26 @@
+language: go
+go:
+- '1.11'
+
+branches:
+  only:
+    - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
+
+before_install:
+  - go get github.com/mitchellh/gox && go install github.com/mitchellh/gox
+
+before_script:
+  - go get ./...
+
+script:
+  - sh build.sh
+
+deploy:
+  provider: releases
+  api_key:
+    secure: YOUR_API_KEY_ENCRYPTED
+  file: bin/*
+  skip_cleanup: true
+  on:
+    tags: true
+    
