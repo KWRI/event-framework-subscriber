@@ -5,22 +5,30 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	ps "cloud.google.com/go/pubsub"
 )
 
 var (
-	proj string
+	proj      string
+	mu        sync.Mutex
+	connected int
+	port      string
 )
 
-func GetClient(ctx context.Context) *ps.Client {
+type contextKey string
+
+func getClient(ctx context.Context) *ps.Client {
 
 	if proj == "" {
 		panic("Can't find Google cloud project used for pubsub.")
 	}
+
 	c, err := ps.NewClient(ctx, proj)
 
 	if err != nil {
@@ -29,13 +37,26 @@ func GetClient(ctx context.Context) *ps.Client {
 	return c
 }
 
-func subscribe(ctx context.Context, subscription string, ch chan *ps.Message) {
+func subscribe(ctx context.Context, subscription string) {
 
-	client := GetClient(ctx)
+	client := getClient(ctx)
 	sub := client.Subscription(subscription)
 
 	err := sub.Receive(ctx, func(ctx context.Context, msg *ps.Message) {
-		ch <- msg
+		val := ctx.Value(contextKey("conn"))
+		if val == nil {
+			return
+		}
+		conn, ok := val.(net.Conn)
+
+		if !ok {
+			return
+		}
+		data := msg.Data
+		ins := []byte(fmt.Sprintf(`, "published_at":"%s", "subscription_name":"%s"}`, msg.PublishTime.Format(time.RFC3339), subscription))
+		closingBraceIdx := bytes.LastIndexByte(data, '}')
+		data = append(data[:closingBraceIdx], ins...)
+		conn.Write(data)
 		msg.Ack()
 	})
 
@@ -45,49 +66,23 @@ func subscribe(ctx context.Context, subscription string, ch chan *ps.Message) {
 
 }
 
-type subscriptions []string
+func initFlag() int {
 
-func (s *subscriptions) String() string {
-	return strings.Join(*s, " ")
-}
-
-func (s *subscriptions) Set(value string) error {
-	for _, v := range strings.Split(value, " ") {
-		if v != "" {
-			s.appendIfMissing(strings.ToLower(v))
-		}
-	}
-	return nil
-}
-
-func (s *subscriptions) appendIfMissing(value string) {
-	for _, existing := range *s {
-		if existing == value {
-			return
-		}
-	}
-
-	*s = append(*s, value)
-}
-
-func execute() int {
 	var (
-		subs   subscriptions
 		secret string
 	)
 
 	flags := flag.NewFlagSet("event-framework-subscriber", flag.ExitOnError)
 	flags.Usage = usage
 	flags.StringVar(&proj, "project", "", "Google Cloud Pub Sub Project Name")
-	flags.Var(&subs, "subscriptions", "Subscription Names separated by space")
 	flags.StringVar(&secret, "credentials-file", "", "Google Secret json file location")
-
+	flags.StringVar(&port, "port", "9001", "TCP Port number default 9001")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		flags.Usage()
 		return 1
 	}
 
-	if proj == "" && len(subs) == 0 {
+	if proj == "" {
 		flags.Usage()
 		return 1
 	}
@@ -95,24 +90,76 @@ func execute() int {
 	if secret != "" && os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", secret)
 	}
+	return -1
+}
 
-	ch := make(chan *ps.Message)
-	ctx := context.Background()
-	for _, subscription := range subs {
-		go subscribe(ctx, subscription, ch)
+func execute() int {
+	if retVal := initFlag(); retVal != -1 {
+		return retVal
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	fmt.Println("Launching server...")
+	ln, err := net.Listen("tcp", ":9001")
+	if err != nil {
+		cancel()
 	}
 
 	for {
 		select {
-		case a := <-ch:
-			data := a.Data
-			ins := []byte(fmt.Sprintf(`, "published_at":"%s"}`, a.PublishTime.Format(time.RFC3339)))
-			closingBraceIdx := bytes.LastIndexByte(data, '}')
-			data = append(data[:closingBraceIdx], ins...)
-			fmt.Println(string(data))
+		case <-(ctx).Done():
+			return 0
+		default:
+			conn, err := ln.Accept()
+			if err != nil {
+				fmt.Println("Error accepting: ", err.Error())
+			}
+			go readConnectionMessage(conn)
+		}
+		fmt.Println("loop called")
+	}
+}
+
+func readConnectionMessage(conn net.Conn) {
+	mu.Lock()
+	connected++
+	mu.Unlock()
+	fmt.Println("Listening message.", "Current connection number #", connected)
+	var buff bytes.Buffer
+	test := make([]byte, 1)
+	delim := []byte(";")
+
+	ctx := context.WithValue(context.Background(), contextKey("conn"), conn)
+	ctx, cancel := context.WithCancel(ctx)
+	for {
+		conn.Read(test)
+		buff.Write(test)
+		if test[0] == delim[0] {
+			message := buff.String()
+			buff.Reset()
+			if message == "quit!;" || message == ";" {
+				cancel()
+				conn.Close()
+				mu.Lock()
+				connected--
+				fmt.Println("Connection closed number of current connection is #", connected)
+				mu.Unlock()
+				return
+			}
+			if message != "" {
+				go processMessage(ctx, message)
+			}
 		}
 	}
-	return 0
+}
+
+func processMessage(ctx context.Context, message string) {
+	if strings.HasPrefix(message, "subscribe:") {
+		sub := strings.TrimPrefix(message, "subscribe:")
+		sub = strings.TrimSuffix(sub, ";")
+		subscribe(ctx, sub)
+	}
 }
 
 func main() {
@@ -124,13 +171,12 @@ func usage() {
 }
 
 const helpText = `
-KW Event Framework Subscriber, subscribe google pubsubs events
+  KW Event Framework Subscriber, subscribe google pubsubs events
+  Usage: event-framework-subscriber -project=value -credentials-file=value -port=value
 
-Usage: event-framework-subscriber -project=value -subscriptions=values -credentials-file=value
-
-Options:
+    Options:
 
 	-project=""            	Google Cloud Pub Sub Project Name
-	-subscriptions=""		Subscription Names separated by space
 	-credentials-file="" 	Google Secret Credentials json file location
+	-port="9001"            TCP Port number default 9001
 `

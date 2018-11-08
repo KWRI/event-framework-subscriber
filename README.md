@@ -18,8 +18,7 @@ sudo chmod +x /usr/bin/event-framework-subscriber
 
 Run:
 ```
-GOOGLE_APPLICATION_CREDENTIALS=PATH_TO_GOOGLE_SECRET_CREDENTIAL_JSON_FILE/google-secret.json event-framework-subscriber -
-subscriptions="subscriptions_name separated_by_space" -project=google-pubsub-project-name
+GOOGLE_APPLICATION_CREDENTIALS=/Path_TO_GOOGLE_CREDENTIALS_FILE/google-secret.json event-framework-subscriber -project=event-framework -port=tcp_port_number_default_9001
 ```
 
 Alternatively you can export GOOGLE_APPLICATION_CREDENTIALS to your OS environment variable from bash profile or using below script before run event-framework-subscriber
