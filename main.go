@@ -101,8 +101,9 @@ func execute() int {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	fmt.Println("Launching server...")
-	ln, err := net.Listen("tcp", ":9001")
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
+		fmt.Println(err)
 		cancel()
 	}
 
@@ -114,10 +115,10 @@ func execute() int {
 			conn, err := ln.Accept()
 			if err != nil {
 				fmt.Println("Error accepting: ", err.Error())
+				continue
 			}
 			go readConnectionMessage(conn)
 		}
-		fmt.Println("loop called")
 	}
 }
 
