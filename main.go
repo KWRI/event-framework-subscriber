@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
@@ -47,23 +48,30 @@ func subscribe(ctx context.Context, subscription string) {
 		if val == nil {
 			return
 		}
-		conn, ok := val.(net.Conn)
-
-		if !ok {
-			return
-		}
+		conn := val.(net.Conn)
 		data := msg.Data
 		ins := []byte(fmt.Sprintf(`, "published_at":"%s", "subscription_name":"%s"}`, msg.PublishTime.Format(time.RFC3339), subscription))
 		closingBraceIdx := bytes.LastIndexByte(data, '}')
 		data = append(data[:closingBraceIdx], ins...)
-		conn.Write(data)
-		msg.Ack()
+		log.Println("Process message", string(data))
+		_, err := conn.Write(data)
+		if err == nil {
+			msg.Ack()
+		}
 	})
 
 	if err != nil {
-		panic(err)
+		reportError(ctx, err)
 	}
+}
 
+func reportError(ctx context.Context, err error) {
+	val := ctx.Value(contextKey("conn"))
+	if val == nil {
+		return
+	}
+	conn := val.(net.Conn)
+	conn.Write([]byte(fmt.Sprintf("error:%s", err.Error())))
 }
 
 func initFlag() int {
@@ -100,10 +108,10 @@ func execute() int {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	fmt.Println("Launching server...")
+	log.Println("Launching server...")
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		cancel()
 	}
 
@@ -112,9 +120,10 @@ func execute() int {
 		case <-(ctx).Done():
 			return 0
 		default:
+			log.Println("Waiting for connection")
 			conn, err := ln.Accept()
 			if err != nil {
-				fmt.Println("Error accepting: ", err.Error())
+				log.Println("Error accepting: ", err.Error())
 				continue
 			}
 			go readConnectionMessage(conn)
@@ -126,17 +135,18 @@ func readConnectionMessage(conn net.Conn) {
 	mu.Lock()
 	connected++
 	mu.Unlock()
-	fmt.Println("Listening message.", "Current connection number #", connected)
+	log.Println("Listening message.", "Current connection number #", connected)
+
 	var buff bytes.Buffer
-	test := make([]byte, 1)
+	chunks := make([]byte, 1)
 	delim := []byte(";")
 
 	ctx := context.WithValue(context.Background(), contextKey("conn"), conn)
 	ctx, cancel := context.WithCancel(ctx)
 	for {
-		conn.Read(test)
-		buff.Write(test)
-		if test[0] == delim[0] {
+		conn.Read(chunks)
+		buff.Write(chunks)
+		if chunks[0] == delim[0] {
 			message := buff.String()
 			buff.Reset()
 			if message == "quit!;" || message == ";" {
@@ -144,7 +154,7 @@ func readConnectionMessage(conn net.Conn) {
 				conn.Close()
 				mu.Lock()
 				connected--
-				fmt.Println("Connection closed number of current connection is #", connected)
+				log.Println("Connection closed number of current connection is #", connected)
 				mu.Unlock()
 				return
 			}
@@ -159,11 +169,13 @@ func processMessage(ctx context.Context, message string) {
 	if strings.HasPrefix(message, "subscribe:") {
 		sub := strings.TrimPrefix(message, "subscribe:")
 		sub = strings.TrimSuffix(sub, ";")
-		subscribe(ctx, sub)
+		log.Println("Subscribing ", sub)
+		go subscribe(ctx, sub)
 	}
 }
 
 func main() {
+	log.SetOutput(os.Stderr)
 	os.Exit(execute())
 }
 
