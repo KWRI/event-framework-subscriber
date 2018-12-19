@@ -8,8 +8,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	ps "cloud.google.com/go/pubsub"
@@ -19,7 +21,6 @@ var (
 	proj      string
 	mu        sync.Mutex
 	connected int
-	port      string
 )
 
 type contextKey string
@@ -84,7 +85,6 @@ func initFlag() int {
 	flags.Usage = usage
 	flags.StringVar(&proj, "project", "", "Google Cloud Pub Sub Project Name")
 	flags.StringVar(&secret, "credentials-file", "", "Google Secret json file location")
-	flags.StringVar(&port, "port", "9001", "TCP Port number default 9001")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		flags.Usage()
 		return 1
@@ -101,34 +101,60 @@ func initFlag() int {
 	return -1
 }
 
+func HandleSIGINTKILL() chan os.Signal {
+	sig := make(chan os.Signal, 1)
+
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	return sig
+}
+
 func execute() int {
 	if retVal := initFlag(); retVal != -1 {
 		return retVal
 	}
-
+	closed := false
 	ctx, cancel := context.WithCancel(context.Background())
 
 	log.Println("Launching server...")
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+
+	ln, err := net.Listen("unix", "/tmp/kw-eventsubscriber.sock")
 	if err != nil {
 		log.Println(err)
 		cancel()
 	}
+	go func() {
+		<-HandleSIGINTKILL()
+		log.Println("Received termination signal")
+		closed = true
+		ln.Close()
+		cancel()
+		os.Exit(0)
+	}()
+
+	defer cancel()
 
 	for {
 		select {
 		case <-(ctx).Done():
+			fmt.Println("Stopped")
+			closed = true
+			ln.Close()
 			return 0
 		default:
 			log.Println("Waiting for connection")
 			conn, err := ln.Accept()
 			if err != nil {
-				log.Println("Error accepting: ", err.Error())
+				if closed {
+					return 0
+				}
+				log.Println("Error accepting: ", err.Error(), closed)
 				continue
 			}
 			go readConnectionMessage(conn)
 		}
 	}
+
 }
 
 func readConnectionMessage(conn net.Conn) {
@@ -185,11 +211,10 @@ func usage() {
 
 const helpText = `
   KW Event Framework Subscriber, subscribe google pubsubs events
-  Usage: event-framework-subscriber -project=value -credentials-file=value -port=value
+  Usage: event-framework-subscriber -project=value -credentials-file=value
 
     Options:
 
 	-project=""            	Google Cloud Pub Sub Project Name
 	-credentials-file="" 	Google Secret Credentials json file location
-	-port="9001"            TCP Port number default 9001
 `
