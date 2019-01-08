@@ -58,6 +58,8 @@ func subscribe(ctx context.Context, subscription string) {
 		_, err := conn.Write(data)
 		if err == nil {
 			msg.Ack()
+		} else {
+			fmt.Println(err.Error())
 		}
 	})
 
@@ -204,7 +206,6 @@ func readConnectionMessage(conn net.Conn) {
 }
 
 func processMessage(ctx context.Context, message string) {
-	fmt.Println(message)
 	if strings.HasPrefix(message, "subscribe:") {
 		sub := strings.TrimPrefix(message, "subscribe:")
 		sub = strings.TrimSuffix(sub, ";")
