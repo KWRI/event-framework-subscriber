@@ -1,6 +1,15 @@
 # event-framework-subscriber
-KW Event Framework Subscriber written in GO
+KW Event Framework Subscriber written in GO, connect your application through unix socket, and send message once connected to subscribe.
 
+Subscribe message format:
+```
+subscribe:topic-name;
+```
+
+To disconnect send message:
+```
+quit!;
+```
 
 Install:
 - Download your OS latest release binary from releases page here: https://github.com/KWRI/event-framework-subscriber/releases
