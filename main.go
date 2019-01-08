@@ -172,6 +172,7 @@ func readConnectionMessage(conn net.Conn) {
 	for {
 		conn.Read(chunks)
 		buff.Write(chunks)
+
 		if chunks[0] == delim[0] {
 			message := buff.String()
 			buff.Reset()
@@ -187,11 +188,23 @@ func readConnectionMessage(conn net.Conn) {
 			if message != "" {
 				go processMessage(ctx, message)
 			}
+		} else {
+			if string(chunks) == "" {
+				cancel()
+				conn.Close()
+				mu.Lock()
+				connected--
+				log.Println("Connection closed number of current connection is #", connected)
+				mu.Unlock()
+				return
+			}
+
 		}
 	}
 }
 
 func processMessage(ctx context.Context, message string) {
+	fmt.Println(message)
 	if strings.HasPrefix(message, "subscribe:") {
 		sub := strings.TrimPrefix(message, "subscribe:")
 		sub = strings.TrimSuffix(sub, ";")
