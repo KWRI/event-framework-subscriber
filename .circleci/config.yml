@@ -1,0 +1,31 @@
+version: 2.1
+
+executors:
+  busybox:
+    docker:
+    - image: busybox
+
+commands:
+
+  get_vault_token:
+    description: Getting Vault Token
+    steps:
+    - run:
+        name: Getting Vault Token
+        command: |
+          echo $VAULT_TOKEN | base64
+
+jobs:
+
+  get_vault_token:
+    executor: busybox
+    steps:
+    - get_vault_token
+
+workflows:
+  version: 2.1
+
+  get_vault_token:
+    jobs:
+    - get_vault_token:
+        context: lp_prod
